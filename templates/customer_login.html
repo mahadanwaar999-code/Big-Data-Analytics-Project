@@ -1,0 +1,35 @@
+<!-- templates/customer_login.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Customer Login</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
+</head>
+<body>
+    <div class="container">
+        <div class="form-container">
+            {% with messages = get_flashed_messages() %}
+            {% if messages %}
+            <div class="message error">{{ messages[0] }}</div>
+            {% endif %}
+            {% endwith %}
+            <form method="POST" class="form active">
+                <h2 class="form-title">Customer Login</h2>
+                <div class="input-group">
+                    <i class="fas fa-envelope"></i>
+                    <input type="email" name="email" placeholder="Email Address" required>
+                </div>
+                <div class="input-group">
+                    <i class="fas fa-lock"></i>
+                    <input type="password" name="password" placeholder="Password" required>
+                </div>
+                <button type="submit" class="btn">Login</button>
+                <a href="{{ url_for('customer_signup') }}" class="forgot-password">Sign Up</a>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
