@@ -1,0 +1,8 @@
+# requirements.txt
+Flask==2.3.3
+numpy==1.24.3  # Downgrade to NumPy 1.x for compatibility
+pandas==1.5.3  # Use pandas version compatible with NumPy 1.x
+pyarrow==10.0.1  # Use older pyarrow version
+pyhdfs==0.3.1
+werkzeug==2.3.7
+schedule==1.2.0
