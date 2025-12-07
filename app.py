@@ -1,21 +1,27 @@
-# app.py
+# app.py (simplified - remove HDFS for now)
 from flask import Flask, render_template, request, redirect, url_for, session, flash
-import sqlite3
-from sqlite3 import Error
+from sqlite3 import Error, connect, IntegrityError
 import os
+import csv
+from datetime import datetime
 
 app = Flask(__name__)
-app.secret_key = 'super_secret_key'  # Change this in production
+app.secret_key = 'super_secret_key'
+app.config['DATABASE'] = os.environ.get('DATABASE_PATH', 'data/inventory.db')
 
-DATABASE = 'inventory.db'
+# Ensure data directory exists
+os.makedirs(os.path.dirname(app.config['DATABASE']), exist_ok=True)
+os.makedirs('/data/hdfs_export', exist_ok=True)
+
 
 def create_connection():
     conn = None
     try:
-        conn = sqlite3.connect(DATABASE)
+        conn = connect(app.config['DATABASE'])
     except Error as e:
-        print(e)
+        print(f"Database connection error: {e}")
     return conn
+
 
 def create_tables():
     conn = create_connection()
@@ -52,12 +58,14 @@ def create_tables():
             )
         ''')
         conn.commit()
+
         # Insert default admins if not exist
         cursor.execute("SELECT COUNT(*) FROM admins")
         if cursor.fetchone()[0] == 0:
             cursor.execute("INSERT INTO admins (username, password) VALUES (?, ?)", ('mahad', 'mahad1122@'))
             cursor.execute("INSERT INTO admins (username, password) VALUES (?, ?)", ('aqeel', 'aqeel1122@'))
             conn.commit()
+
         # Insert example stocks if not exist
         cursor.execute("SELECT COUNT(*) FROM stocks")
         if cursor.fetchone()[0] == 0:
@@ -67,13 +75,60 @@ def create_tables():
                 ('Air Suspension', 'Toyota', 'New', 'Genuine', 0, 45000, 53500),
                 ('Speaker', 'Audionic', 'New', '8D', 60, 15500, 21500)
             ]
-            cursor.executemany("INSERT INTO stocks (name, brand, condition, quality, quantity, original_price, sale_price) VALUES (?, ?, ?, ?, ?, ?, ?)", stocks_data)
+            cursor.executemany(
+                "INSERT INTO stocks (name, brand, condition, quality, quantity, original_price, sale_price) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                stocks_data)
             conn.commit()
         conn.close()
+        print("Database tables created successfully")
 
-create_tables()
 
-# Index
+# Simple CSV Export (no pandas needed)
+@app.route('/export_to_hdfs')
+def export_to_hdfs():
+    if 'admin_id' not in session:
+        flash('Admin access required')
+        return redirect(url_for('admin_login'))
+
+    try:
+        conn = create_connection()
+        cursor = conn.cursor()
+        tables = ['admins', 'customers', 'stocks']
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+        for table in tables:
+            cursor.execute(f"SELECT * FROM {table}")
+            rows = cursor.fetchall()
+
+            # Get column names
+            cursor.execute(f"PRAGMA table_info({table})")
+            columns = [col[1] for col in cursor.fetchall()]
+
+            # Export to CSV
+            export_path = f'/data/hdfs_export/{table}_{timestamp}.csv'
+            with open(export_path, 'w', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerow(columns)
+                writer.writerows(rows)
+
+            print(f"Exported {table} to {export_path}")
+
+        conn.close()
+        flash(f'Data exported successfully! Files saved with timestamp: {timestamp}')
+    except Exception as e:
+        flash(f'Export failed: {str(e)}')
+
+    return redirect(url_for('admin_panel'))
+
+
+# ... [KEEP ALL YOUR EXISTING ROUTES EXACTLY AS THEY WERE] ...
+# Just copy all your routes from the original app.py here
+# Make sure to include: admin_login, admin_panel, customer_login, etc.
+
+
+# ... [ALL YOUR EXISTING ROUTES REMAIN THE SAME - keep everything from admin_login to logout] ...
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -156,7 +211,7 @@ def customer_signup():
                 conn.commit()
                 flash('Account created successfully. Please login.')
                 return redirect(url_for('customer_login'))
-            except sqlite3.IntegrityError:
+            except IntegrityError:
                 flash('Email already exists')
             conn.close()
     return render_template('customer_signup.html')
@@ -303,4 +358,5 @@ def logout():
     return redirect(url_for('index'))
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    create_tables()
+    app.run(host='0.0.0.0', port=5000, debug=True)
